@@ -4,6 +4,80 @@ const Class = require('../models/Class');
 
 const { auth } = require('../middleware/auth');
 const { studentValidation, paramValidation, queryValidation } = require('../middleware/validation');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const path = require('path');
+
+// Multer config for Excel uploads
+const upload = multer({
+    dest: path.join(__dirname, '../uploads'),
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.mimetype === 'application/vnd.ms-excel' ||
+            file.mimetype === 'text/csv') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only Excel or CSV files are allowed'));
+        }
+    }
+});
+
+// @route   POST /api/students/import
+// @desc    Import students from Excel/CSV file
+// @access  Private
+router.post('/import', auth, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No file uploaded' });
+        }
+        const filePath = req.file.path;
+        const workbook = xlsx.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+
+        // Required fields
+        const required = ['Student ID', 'First Name', 'Last Name', 'Email'];
+        const missingFields = required.filter(f => !Object.keys(rows[0] || {}).includes(f));
+        if (missingFields.length) {
+            return res.status(400).json({ success: false, message: 'Missing columns: ' + missingFields.join(', ') });
+        }
+
+        let imported = 0, updated = 0, errors = [];
+        for (const row of rows) {
+            try {
+                const studentData = {
+                    studentId: String(row['Student ID']).trim(),
+                    firstName: String(row['First Name']).trim(),
+                    lastName: String(row['Last Name']).trim(),
+                    email: String(row['Email']).trim(),
+                    phoneNumber: row['Phone Number'] ? String(row['Phone Number']).trim() : undefined,
+                    dateOfBirth: row['Date of Birth'] ? new Date(row['Date of Birth']) : undefined,
+                    academicInfo: {
+                        major: row['Major'] ? String(row['Major']).trim() : undefined,
+                        year: row['Academic Year'] ? String(row['Academic Year']).trim() : undefined,
+                        gpa: row['GPA'] ? parseFloat(row['GPA']) : undefined
+                    }
+                };
+                // Upsert student
+                const existing = await Student.findOne({ studentId: studentData.studentId });
+                if (existing) {
+                    await Student.updateOne({ studentId: studentData.studentId }, studentData);
+                    updated++;
+                } else {
+                    await Student.create(studentData);
+                    imported++;
+                }
+            } catch (err) {
+                errors.push({ row, error: err.message });
+            }
+        }
+        res.json({ success: true, imported, updated, errors });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 const router = express.Router();
 

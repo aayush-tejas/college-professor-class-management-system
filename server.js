@@ -77,6 +77,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/grades', gradeRoutes);
+app.use('/api/import', require('./routes/import'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
