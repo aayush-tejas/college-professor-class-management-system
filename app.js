@@ -990,6 +990,134 @@ class ClassManagementApp {
         this.calendar.render();
     }
 
+    async showCalendarSyncModal() {
+        // Show the modal
+        const calendarSyncModal = new bootstrap.Modal(document.getElementById('calendarSyncModal'));
+        calendarSyncModal.show();
+        
+        // Reset form
+        const importForm = document.getElementById('importCalendarForm');
+        if (importForm) {
+            importForm.reset();
+        }
+        
+        // Populate classes dropdown
+        try {
+            const response = await this.apiCall('/classes');
+            const classes = response.data.classes;
+            
+            const selectElement = document.getElementById('importClassId');
+            if (selectElement) {
+                // Clear existing options except the first one
+                while (selectElement.options.length > 1) {
+                    selectElement.remove(1);
+                }
+                
+                // Add class options
+                classes.forEach(cls => {
+                    const option = document.createElement('option');
+                    option.value = cls._id;
+                    option.textContent = `${cls.courseCode}: ${cls.courseName}`;
+                    selectElement.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load classes for import:', error);
+        }
+        
+        // Show loading spinner for sync links
+        document.getElementById('syncLinks').classList.add('d-none');
+        document.getElementById('syncLinksLoading').classList.remove('d-none');
+        
+        // Get sync links
+        try {
+            const response = await this.apiCall('/calendar/sync/links');
+            const { icalUrl, googleLink, outlookLink } = response.data;
+            
+            // Update the UI with the links
+            document.getElementById('icalUrl').value = icalUrl;
+            document.getElementById('googleCalendarLink').href = googleLink;
+            document.getElementById('outlookCalendarLink').href = outlookLink;
+            
+            // Hide loading spinner and show links
+            document.getElementById('syncLinksLoading').classList.add('d-none');
+            document.getElementById('syncLinks').classList.remove('d-none');
+        } catch (error) {
+            console.error('Failed to get sync links:', error);
+            this.showAlert('Failed to generate calendar sync links', 'danger');
+            document.getElementById('syncLinksLoading').classList.add('d-none');
+        }
+        
+        // Add event listener for import form submission
+        const form = document.getElementById('importCalendarForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleCalendarImport(e));
+        }
+    }
+    
+    async handleCalendarImport(e) {
+        e.preventDefault();
+        this.showLoading();
+        
+        try {
+            const fileInput = document.getElementById('calendarFile');
+            const classId = document.getElementById('importClassId').value;
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                throw new Error('Please select an iCalendar file');
+            }
+            
+            const file = fileInput.files[0];
+            if (file.type !== 'text/calendar' && !file.name.endsWith('.ics')) {
+                throw new Error('Please select a valid iCalendar (.ics) file');
+            }
+            
+            // Read the file contents
+            const fileContent = await this.readFileAsText(file);
+            
+            // Send to the server
+            const response = await this.apiCall('/calendar/import/ical', 'POST', {
+                icalContent: fileContent,
+                classId: classId || null
+            });
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('calendarSyncModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Refresh calendar if it's currently shown
+            if (this.calendar) {
+                this.calendar.refetchEvents();
+            }
+            
+            this.showAlert(`Successfully imported ${response.data.events.length} events`, 'success');
+        } catch (error) {
+            this.showAlert(error.message, 'danger');
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (event) => resolve(event.target.result);
+            reader.onerror = (error) => reject(error);
+            reader.readAsText(file);
+        });
+    }
+    
+    copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.select();
+            document.execCommand('copy');
+            this.showAlert('Copied to clipboard!', 'info', 2000);
+        }
+    }
+
     showEventDetails(event) {
         const modalHtml = `
             <div class="modal fade" id="eventDetailsModal" tabindex="-1">
@@ -1345,6 +1473,14 @@ function showRegisterModal() {
     
     const registerModal = new bootstrap.Modal(document.getElementById('registerModal'));
     registerModal.show();
+}
+
+function testLogin() {
+    if (app) {
+        app.testLogin();
+    } else {
+        console.error('App instance not found');
+    }
 }
 
 function showDashboard() {

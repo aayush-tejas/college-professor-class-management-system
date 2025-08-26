@@ -872,6 +872,9 @@
                         <h2><i class="fas fa-calendar me-2"></i>Calendar</h2>
                     </div>
                     <div class="col-md-6 text-end">
+                        <button class="btn btn-success me-2" onclick="app.showCalendarSyncModal()">
+                            <i class="fas fa-sync me-2"></i>Sync Calendar
+                        </button>
                         <button class="btn btn-primary" onclick="showAddEventModal()">
                             <i class="fas fa-plus me-2"></i>Add Event
                         </button>
@@ -881,6 +884,129 @@
                 <div class="card">
                     <div class="card-body">
                         <div id="calendar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calendar Sync Modal -->
+            <div class="modal fade" id="calendarSyncModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-sync me-2"></i>Sync Calendar
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <ul class="nav nav-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="export-tab" data-bs-toggle="tab" data-bs-target="#export-tab-content" type="button" role="tab">
+                                        <i class="fas fa-upload me-1"></i>Export
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-tab-content" type="button" role="tab">
+                                        <i class="fas fa-download me-1"></i>Import
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content pt-3">
+                                <!-- Export Tab -->
+                                <div class="tab-pane fade show active" id="export-tab-content" role="tabpanel">
+                                    <div class="mb-4">
+                                        <h6>Export Calendar</h6>
+                                        <p class="text-muted">Export your calendar to use with other applications.</p>
+                                        <a href="/api/calendar/export/ical" class="btn btn-outline-primary" download="calendar.ics">
+                                            <i class="fas fa-file-export me-1"></i>Download iCalendar File
+                                        </a>
+                                    </div>
+                                    
+                                    <hr>
+                                    
+                                    <div class="mb-4">
+                                        <h6>Sync with External Calendars</h6>
+                                        <p class="text-muted">Use these links to add your calendar to external calendar applications.</p>
+                                        
+                                        <div id="syncLinks" class="d-none">
+                                            <div class="list-group">
+                                                <a href="#" id="googleCalendarLink" class="list-group-item list-group-item-action" target="_blank">
+                                                    <div class="d-flex align-items-center">
+                                                        <i class="fab fa-google text-danger me-3 fa-2x"></i>
+                                                        <div>
+                                                            <h6 class="mb-1">Google Calendar</h6>
+                                                            <small class="text-muted">Add to your Google Calendar</small>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                                
+                                                <a href="#" id="outlookCalendarLink" class="list-group-item list-group-item-action" target="_blank">
+                                                    <div class="d-flex align-items-center">
+                                                        <i class="fab fa-microsoft text-primary me-3 fa-2x"></i>
+                                                        <div>
+                                                            <h6 class="mb-1">Microsoft Outlook</h6>
+                                                            <small class="text-muted">Add to your Outlook Calendar</small>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                                
+                                                <div class="list-group-item">
+                                                    <div class="d-flex align-items-center">
+                                                        <i class="fas fa-link text-secondary me-3 fa-2x"></i>
+                                                        <div class="flex-grow-1">
+                                                            <h6 class="mb-1">Calendar URL</h6>
+                                                            <small class="text-muted">Use this URL to add to any calendar app that supports iCalendar</small>
+                                                            <div class="input-group mt-2">
+                                                                <input type="text" id="icalUrl" class="form-control" readonly>
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="app.copyToClipboard('icalUrl')">
+                                                                    <i class="fas fa-copy"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div id="syncLinksLoading" class="text-center py-4">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">Generating sync links...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Import Tab -->
+                                <div class="tab-pane fade" id="import-tab-content" role="tabpanel">
+                                    <div class="mb-4">
+                                        <h6>Import Calendar</h6>
+                                        <p class="text-muted">Import events from an iCalendar (.ics) file.</p>
+                                        
+                                        <form id="importCalendarForm">
+                                            <div class="mb-3">
+                                                <label for="calendarFile" class="form-label">iCalendar File</label>
+                                                <input class="form-control" type="file" id="calendarFile" accept=".ics">
+                                                <div class="form-text">Select an iCalendar (.ics) file to import</div>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label for="importClassId" class="form-label">Associate with Class (Optional)</label>
+                                                <select class="form-select" id="importClassId">
+                                                    <option value="">None</option>
+                                                    <!-- Classes will be populated dynamically -->
+                                                </select>
+                                            </div>
+                                            
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-file-import me-1"></i>Import Events
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

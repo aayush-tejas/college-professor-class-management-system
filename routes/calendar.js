@@ -3,6 +3,8 @@ const CalendarEvent = require('../models/CalendarEvent');
 const Class = require('../models/Class');
 const { auth } = require('../middleware/auth');
 const { calendarValidation, paramValidation, queryValidation } = require('../middleware/validation');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
@@ -544,6 +546,162 @@ router.get('/analytics', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to get calendar analytics'
+        });
+    }
+});
+
+// @route   GET /api/calendar/export/ical
+// @desc    Export calendar as iCalendar file
+// @access  Private
+router.get('/export/ical', auth, async (req, res) => {
+    try {
+        const calendarSyncService = require('../services/calendarSync');
+        const Professor = require('../models/Professor');
+        
+        // Get all events for the professor
+        const events = await CalendarEvent.find({ 
+            professor: req.professorId,
+            isVisible: true
+        });
+        
+        const professor = await Professor.findById(req.professorId);
+        
+        if (!professor) {
+            return res.status(404).json({
+                success: false,
+                message: 'Professor not found'
+            });
+        }
+        
+        // Generate iCalendar content
+        const icalContent = calendarSyncService.generateICalendar(events, professor);
+        
+        // Save to file
+        const filePath = calendarSyncService.saveICalendarToFile(icalContent, req.professorId);
+        
+        // Set headers for file download
+        res.setHeader('Content-Type', 'text/calendar');
+        res.setHeader('Content-Disposition', 'attachment; filename=calendar.ics');
+        
+        // Send the iCalendar content
+        res.send(icalContent);
+    } catch (error) {
+        console.error('Export calendar error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to export calendar'
+        });
+    }
+});
+
+// @route   GET /api/calendar/ical/:professorId
+// @desc    Get public iCalendar feed for a professor
+// @access  Public
+router.get('/ical/:professorId', async (req, res) => {
+    try {
+        const calendarSyncService = require('../services/calendarSync');
+        const filePath = calendarSyncService.createICalFilePath(req.params.professorId);
+        
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Calendar not found'
+            });
+        }
+        
+        const icalContent = fs.readFileSync(filePath, 'utf8');
+        
+        // Set content type for iCalendar
+        res.setHeader('Content-Type', 'text/calendar');
+        res.send(icalContent);
+    } catch (error) {
+        console.error('Get iCalendar error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get calendar'
+        });
+    }
+});
+
+// @route   GET /api/calendar/sync/links
+// @desc    Get links to sync calendar with external services
+// @access  Private
+router.get('/sync/links', auth, async (req, res) => {
+    try {
+        const calendarSyncService = require('../services/calendarSync');
+        
+        // Base URL for the iCalendar feed
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        
+        // Generate the iCalendar URL
+        const icalUrl = calendarSyncService.generatePublicUrl(req.professorId, baseUrl);
+        
+        // Generate sync links for different services
+        const googleLink = calendarSyncService.generateGoogleCalendarLink(icalUrl);
+        const outlookLink = calendarSyncService.generateOutlookCalendarLink(icalUrl);
+        
+        res.json({
+            success: true,
+            data: {
+                icalUrl,
+                googleLink,
+                outlookLink
+            }
+        });
+    } catch (error) {
+        console.error('Get sync links error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate sync links'
+        });
+    }
+});
+
+// @route   POST /api/calendar/import/ical
+// @desc    Import events from iCalendar file
+// @access  Private
+router.post('/import/ical', auth, async (req, res) => {
+    try {
+        const calendarSyncService = require('../services/calendarSync');
+        const { icalContent, classId } = req.body;
+        
+        if (!icalContent) {
+            return res.status(400).json({
+                success: false,
+                message: 'iCalendar content is required'
+            });
+        }
+        
+        // Parse the iCalendar content
+        const parsedEvents = calendarSyncService.parseICalendar(icalContent);
+        
+        // Insert the events into the database
+        const createdEvents = [];
+        for (const eventData of parsedEvents) {
+            const event = new CalendarEvent({
+                ...eventData,
+                professor: req.professorId,
+                class: classId || null,
+                isVisible: true,
+                isExternal: true
+            });
+            
+            await event.save();
+            createdEvents.push(event);
+        }
+        
+        res.status(201).json({
+            success: true,
+            message: `Successfully imported ${createdEvents.length} events`,
+            data: {
+                events: createdEvents
+            }
+        });
+    } catch (error) {
+        console.error('Import calendar error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to import calendar'
         });
     }
 });

@@ -35,17 +35,27 @@ app.use(helmet({
             baseUri: ["'self'"],
             formAction: ["'self'"],
             frameAncestors: ["'self'"],
-            upgradeInsecureRequests: []
+            upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
         }
-    }
+    },
+    xssFilter: true,
+    noSniff: true,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: process.env.NODE_ENV === 'production' ? {
+        maxAge: 31536000, // 1 year in seconds
+        includeSubDomains: true,
+        preload: true
+    } : false
 }));
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? ['your-domain.com'] : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-    credentials: true
+    origin: process.env.NODE_ENV === 'production' ? [process.env.FRONTEND_URL || 'https://your-domain.com'] : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Logging middleware
-app.use(morgan('combined'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Rate limiting
 app.use(limiter);
@@ -54,7 +64,8 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files
+// Static files - serve from both root and public directories
+app.use(express.static(path.join(__dirname)));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Database connection
@@ -78,6 +89,11 @@ app.use('/api/students', studentRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/import', require('./routes/import'));
+
+// Serve the main index.html file for the root route
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -384,7 +400,7 @@ app.post('/api/test/init', async (req, res) => {
 app.get('*', (req, res) => {
     // Only serve index.html for non-API routes
     if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        res.sendFile(path.join(__dirname, 'index.html'));
     } else {
         res.status(404).json({
             success: false,
@@ -393,16 +409,27 @@ app.get('*', (req, res) => {
     }
 });
 
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'API endpoint not found'
+    });
+});
+
 // Error handling middleware
 app.use(errorHandler);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
-    console.log(`Error: ${err.message}`);
-    // Close server & exit process
-    server.close(() => {
-        process.exit(1);
-    });
+    console.log(`Unhandled Rejection: ${err.message}`);
+    // In production, don't crash the server
+    if (process.env.NODE_ENV !== 'production') {
+        // Close server & exit process in development for immediate attention
+        server.close(() => {
+            process.exit(1);
+        });
+    }
 });
 
 const PORT = process.env.PORT || 3000;

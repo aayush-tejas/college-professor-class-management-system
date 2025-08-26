@@ -65,6 +65,23 @@ const calendarEventSchema = new mongoose.Schema({
             password: String
         }
     },
+    isVisible: {
+        type: Boolean,
+        default: true
+    },
+    isExternal: {
+        type: Boolean,
+        default: false
+    },
+    externalId: {
+        type: String,
+        sparse: true
+    },
+    externalCalendarType: {
+        type: String,
+        enum: ['google', 'outlook', 'ical', 'other'],
+        default: 'other'
+    },
     recurrence: {
         isRecurring: {
             type: Boolean,

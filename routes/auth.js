@@ -40,7 +40,7 @@ router.post('/register', authLimiter, professorValidation.register, async (req, 
         const token = jwt.sign(
             { id: professor._id },
             process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRES_IN }
+            { expiresIn: "24h" }
         );
 
         res.status(201).json({
@@ -97,7 +97,7 @@ router.post('/login', authLimiter, professorValidation.login, async (req, res) =
         const token = jwt.sign(
             { id: professor._id },
             process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRES_IN }
+            { expiresIn: "24h" }
         );
 
         // Remove password from response
